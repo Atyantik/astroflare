@@ -3,16 +3,58 @@ import { dirname, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { init } from './setup-wrangler.mjs';
 import { fileURLToPath } from 'node:url';
+import { addAstroProject } from './add-astro.mjs';
+import Logger from '../utils/logger.js';
 
 const rootDir = resolve(dirname(dirname(fileURLToPath(import.meta.url))));
+// Registered Custom commands
+const commands = {
+  add: {
+    astro: async () => {
+      try {
+        await addAstroProject(rootDir);
+      } catch (err) {
+        Logger.error(`Failed to add Astro project: ${err.message}`);
+      } finally {
+        return;
+      }
+    },
+    // Add new sub commands here
+    default: (subCommand) => Logger.error(`Unknown subCommand: ${subCommand}`),
+  },
+};
 
 async function main() {
   // 1. Run setup
   await init();
 
+  const [, , command, ...args] = process.argv;
+
+  if (!command) {
+    Logger.error('No command provided.');
+    console.log(
+      `\nUsage:\n- npx flarekit <command> [args]\n- npm run <command> [args]`,
+    );
+    process.exit(1);
+  }
+
+  // Check for custom command
+  if (commands[command]) {
+    const subCommand = args[0];
+    const commandFn =
+      commands[command][subCommand] || commands[command].default;
+
+    if (typeof commandFn === 'function') {
+      await commandFn(subCommand);
+      return;
+    } else {
+      Logger.error(`Invalid subcommand: ${subCommand}`);
+      process.exit(1);
+    }
+  }
+
   // 2. Build the turbo command + arguments
-  const [, , ...args] = process.argv;
-  const turboArgs = args; // e.g. ['run', 'preview'] or whatever you pass
+  const turboArgs = [command, ...args]; // e.g. ['run', 'preview'] or whatever you pass
   console.log(`Executing turbo with args: ${turboArgs.join(' ')}`);
 
   // 3. Spawn Turbo
